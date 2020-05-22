@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org",
+    "$id": "http://yio-remote.com/openhab.json",
+    "type": "object",
+    "title": "YIO Integration OpenHAB Schema",
+    "description": "Required data points to set up a OpenHAB integrations.",
+    "default": {},
+    "additionalProperties": true,
+    "required": [
+        "url"
+    ],
+    "properties": {
+        "url": {
+            "$id": "#/properties/url",
+            "type": "string",
+            "title": "IP address or hostname and port",
+            "description": "The IP address or hostname and port of your OpenHAB server.",
+            "default": "",
+            "examples": [
+                "192.168.100.2:8123", "yourdomain.com:8123"
+            ]
+        }
+    }
+}
