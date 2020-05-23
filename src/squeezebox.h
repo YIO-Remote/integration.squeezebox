@@ -75,7 +75,8 @@ class Squeezebox : public Integration {
     struct SqPlayer {
         SqPlayer() {}
         SqPlayer(bool connected) : connected(connected) {}
-        bool connected;
+        bool connected = false;
+        bool subscribed = false;
     };
 
 
@@ -88,7 +89,7 @@ class Squeezebox : public Integration {
 
  private:
     enum connectionStates {
-        idle, cometdHandshake, cometdConnect, cometdSubscribe, connected
+        idle, playerInfo, cometdHandshake, cometdConnect, cometdSubscribe, connected
     } connectionState;
     QString               _url;
     int                   _port;
@@ -99,7 +100,9 @@ class Squeezebox : public Integration {
     QString _clientId;
 
     int _playerCnt;
-    QMap<QString, SqPlayer> _sqPlayerDatabase;
+    QMap<QString, SqPlayer> _sqPlayerDatabase; // key: player mac, value: player infos
+    QMap<int, QString> _sqPlayerIdMapping; // key: subscription id, value: player mac
 
     QList<EntityInterface*> _myEntities;
+    QString _subscriptionChannel;
 };

@@ -74,9 +74,8 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
 
 void Squeezebox::connect() {
     setState(CONNECTING);
-    getPlayers();
 
-    //_socket.connectToHost(_url, _port);
+    getPlayers();
 }
 
 void Squeezebox::disconnect() { setState(DISCONNECTED); }
@@ -107,6 +106,8 @@ QNetworkRequest Squeezebox::buildRpcRequest(){
 }
 
 void Squeezebox::getPlayers() {
+    connectionState = playerInfo;
+
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, "-", "players 0 99"));
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
@@ -139,6 +140,8 @@ void Squeezebox::getPlayers() {
         // HERE: suche nicht verbundene player
         qCDebug(m_logCategory) << "Server reported " << _playerCnt << "player/s";
 
+        // connect to socket
+        _socket.connectToHost(_url, _port);
     });
 }
 
@@ -171,8 +174,8 @@ void Squeezebox::socketReceived() {
     QString     answer = _socket.readAll();
     QStringList all = answer.split(QRegExp("[\r\n]"), QString::SkipEmptyParts);
 
-    // check if the answer is a valid http 200 response
-    if (!(all[0].startsWith("HTTP") && all[0].endsWith("200 OK"))) {
+    // check if the answer is a valid http 200 response or if it is a CometD packet
+    if (! ((all[0].startsWith("HTTP") && all[0].endsWith("200 OK")) || (all.size() == 2))) {
         return;
     }
 
@@ -192,12 +195,11 @@ void Squeezebox::socketReceived() {
     while (!list.isEmpty()) {
         QVariantMap map = list.takeFirst().toMap();
 
-
-
         if (connectionState == cometdHandshake && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/handshake") {
             // first step of handshake process; getting client id
             _clientId = map.value("clientId").toString().remove("\"");
             qCInfo(m_logCategory) << "Client ID: " << _clientId;
+            _subscriptionChannel = "/slim/" + _clientId + "/status";
 
             connectionState = cometdConnect;
 
@@ -206,7 +208,61 @@ void Squeezebox::socketReceived() {
             sendCometd(&message);
         } else if( connectionState == cometdConnect && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/connect") {
             // now connected
+            // subscribe to player messages
 
+            connectionState = cometdSubscribe;
+
+            for (QMap<QString, SqPlayer>::iterator i = _sqPlayerDatabase.begin(); i != _sqPlayerDatabase.end(); ++i) {
+                SqPlayer player = *i;
+                if (player.connected && !player.subscribed) {
+                    int rand = qrand();
+                    //QString command = "status 0 999 tags:acdj subscribe:60";
+                    QString command = "status - 1 tags:aBdgKlNotuxyY subscribe:60";
+
+                    QJsonArray request = QJsonArray();
+                    request.append(i.key());
+                    request.append(QJsonArray::fromStringList(command.split(" ")));
+
+                    QJsonObject data = QJsonObject();
+                    data.insert("response", _subscriptionChannel);
+                    data.insert("request", request);
+                    data.insert("priority", 1);
+
+                    QJsonObject json = QJsonObject();
+                    json.insert("channel", "/slim/subscribe");
+                    json.insert("clientId", _clientId);
+                    json.insert("id", rand);
+                    json.insert("data", data);
+
+                    QJsonArray complete = QJsonArray();
+                    complete.append(json);
+
+                    QByteArray message = QJsonDocument(complete).toJson();
+
+
+                    _sqPlayerIdMapping.insert(rand, i.key());
+                    sendCometd(&message);
+                }
+            }
+        } else if (connectionState == cometdSubscribe && map.value("successful").toBool() == true && map.value("channel").toString() == "/slim/subscribe") {
+            QString player = _sqPlayerIdMapping.value(map["id"].toInt());
+            _sqPlayerDatabase[player].subscribed = true;
+
+            int subscriptions = 0;
+            int connected = 0;
+            for (auto i : _sqPlayerDatabase) {
+                if (i.connected) {
+                    connected++;
+                }
+                if (i.connected && i.subscribed) {
+                    subscriptions++;
+                }
+            }
+            if (connected == subscriptions) {
+                connectionState = connectionStates::connected;
+            }
+        } else if (map.value("channel").toString() == _subscriptionChannel) {
+            QString player = _sqPlayerIdMapping.value(map["id"].toInt());
         }
     }
 }
