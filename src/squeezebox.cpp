@@ -66,6 +66,13 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
         _sqPlayerDatabase.insert(entity->entity_id(), SqPlayer(false));
     }
 
+    // prepare media progress timer
+    _mediaProgress.setSingleShot(false);
+    _mediaProgress.setInterval(500);
+    _mediaProgress.stop();
+
+    QObject::connect(&_mediaProgress, &QTimer::timeout, this, &Squeezebox::onMediaProgressTimer);
+
     QObject::connect(&_socket, &QTcpSocket::connected, this, &Squeezebox::socketConnected);
     QObject::connect(&_socket, &QIODevice::readyRead, this, &Squeezebox::socketReceived);
 
@@ -214,8 +221,11 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     // get current player status
     if (data.value("mode").toString() == "play") {
         entity->setState(MediaPlayerDef::PLAYING);
+        _sqPlayerDatabase[playerMac].isPlaying = true;
+        _mediaProgress.start();
     } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
         entity->setState(MediaPlayerDef::IDLE);
+        _sqPlayerDatabase[playerMac].isPlaying = false;
     }
 
     // get track infos
@@ -223,7 +233,33 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
     entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
     entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
+    if (playlistItem.value("coverart").toBool()) {
     entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
+    } else {
+        entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, "");
+    }
+    entity->updateAttrByIndex(MediaPlayerDef::VOLUME, data.value("mixer_volume").toInt());
+    entity->updateAttrByIndex(MediaPlayerDef::MEDIADURATION, data.value("duration").toInt());
+
+    _sqPlayerDatabase[playerMac].position = data.value("time").toDouble();
+    entity->updateAttrByIndex(MediaPlayerDef::MEDIAPROGRESS, _sqPlayerDatabase[playerMac].position);
+}
+
+
+void Squeezebox::onMediaProgressTimer() {
+    bool onePlaying = false;
+    for (QMap<QString, SqPlayer>::iterator i = _sqPlayerDatabase.begin(); i != _sqPlayerDatabase.end(); ++i) {
+        if (i->isPlaying) {
+            onePlaying = true;
+            i->position += 0.5;
+
+            m_entities->getEntityInterface(i.key())->updateAttrByIndex(MediaPlayerDef::MEDIAPROGRESS, i->position);
+        }
+    }
+
+    if (onePlaying == false) {
+        _mediaProgress.stop();
+    }
 }
 
 void Squeezebox::socketReceived() {

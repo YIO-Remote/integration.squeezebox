@@ -70,16 +70,18 @@ class Squeezebox : public Integration {
 
     void socketConnected();
     void socketReceived();
+    void onMediaProgressTimer();
 
  private:
     struct SqPlayer {
         SqPlayer() {}
         SqPlayer(bool connected) : connected(connected) {}
-        bool connected = false;
-        bool subscribed = false;
+        bool   connected = false;
+        bool   subscribed = false;
+        bool isPlaying = false;
+        double position = 0;
     };
-    const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgKlNotuxyY";
-
+    const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgjKlNotuxyY";
 
     void getPlayers();
     void jsonError(const QString& error);
@@ -88,25 +90,28 @@ class Squeezebox : public Integration {
     void getPlayerStatus(const QString& playerMac);
     void parsePlayerStatus(const QString& playerMac, const QVariantMap& data);
 
-    QByteArray buildRpcJson(int id, const QString& player, const QString& command);
+    QByteArray      buildRpcJson(int id, const QString& player, const QString& command);
     QNetworkRequest buildRpcRequest();
 
  private:
     enum connectionStates {
-        idle, playerInfo, cometdHandshake, cometdConnect, cometdSubscribe, connected
+        idle,
+        playerInfo,
+        cometdHandshake,
+        cometdConnect,
+        cometdSubscribe,
+        connected
     } connectionState;
-    QString               _url;
-    int                   _port;
-    QString _httpurl;
-    QNetworkAccessManager _nam;
-    QTcpSocket            _socket;
-
-    QString _clientId;
-
-    int _playerCnt;
-    QMap<QString, SqPlayer> _sqPlayerDatabase; // key: player mac, value: player infos
-    QMap<int, QString> _sqPlayerIdMapping; // key: subscription id, value: player mac
-
+    QString                 _url;
+    int                     _port;
+    QString                 _httpurl;
+    QNetworkAccessManager   _nam;
+    QTcpSocket              _socket;
+    QTimer                  _mediaProgress;
+    QString                 _clientId;
+    int                     _playerCnt;
+    QString                 _subscriptionChannel;
+    QMap<QString, SqPlayer> _sqPlayerDatabase;   // key: player mac, value: player infos
+    QMap<int, QString>      _sqPlayerIdMapping;  // key: subscription id, value: player mac
     QList<EntityInterface*> _myEntities;
-    QString _subscriptionChannel;
 };
