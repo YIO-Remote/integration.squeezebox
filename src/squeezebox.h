@@ -83,6 +83,7 @@ class Squeezebox : public Integration {
     void getPlayers();
     void jsonError(const QString& error);
     void sendCometd(QByteArray* message);
+    void sqCommand(const QString& playerMac, const QString& command);
 
     QByteArray buildRpcJson(int id, QString player, QString command);
     QNetworkRequest buildRpcRequest();

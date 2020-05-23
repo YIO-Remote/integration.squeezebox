@@ -145,6 +145,26 @@ void Squeezebox::getPlayers() {
     });
 }
 
+void Squeezebox::sqCommand(const QString& playerMac, const QString& command) {
+
+    QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, command));
+    QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
+        QString         answer = reply->readAll();
+        QJsonParseError parseerror;
+        QJsonDocument   doc = QJsonDocument::fromJson(answer.toUtf8(), &parseerror);
+
+        if (parseerror.error != QJsonParseError::NoError) {
+            jsonError(parseerror.errorString());
+            return;
+        }
+
+        QVariantMap map = doc.toVariant().toMap();
+        QVariantMap results = qvariant_cast<QVariantMap>(map.value("result"));
+
+        // HERE: suche nicht verbundene player
+        qCDebug(m_logCategory) << "kommando gesendet";
+    });
+}
 
 void Squeezebox::sendCometd(QByteArray* message) {
     QByteArray header = "POST /cometd HTTP/1.1\n";
@@ -260,6 +280,7 @@ void Squeezebox::socketReceived() {
             }
             if (connected == subscriptions) {
                 connectionState = connectionStates::connected;
+                setState(CONNECTED);
             }
         } else if (map.value("channel").toString() == _subscriptionChannel) {
             QString player = _sqPlayerIdMapping.value(map["id"].toInt());
@@ -271,7 +292,7 @@ void Squeezebox::socketReceived() {
             // get current player status
             if (data.value("mode").toString() == "play") {
                 entity->setState(MediaPlayerDef::PLAYING);
-            } else if (data.value("mode").toString() == "pause") {
+            } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
                 entity->setState(MediaPlayerDef::IDLE);
             }
 
@@ -285,6 +306,24 @@ void Squeezebox::socketReceived() {
     }
 }
 
-void Squeezebox::sendCommand(const QString& type, const QString& entityId, int command, const QVariant& param) {}
+void Squeezebox::sendCommand(const QString& type, const QString& entityId, int command, const QVariant& param) {
+    if (type != "media_player") {
+        qCCritical(m_logCategory) << "Something went completly wrong - item type: " << type;
+        return;
+    }
+
+    if (command == MediaPlayerDef::C_PLAY) {
+        sqCommand(entityId, "play");
+    } else if (command == MediaPlayerDef::C_PAUSE) {
+        sqCommand(entityId, "pause 1");
+    } else if (command == MediaPlayerDef::C_STOP) {
+        sqCommand(entityId, "stop");
+    } else if (command == MediaPlayerDef::C_NEXT) {
+        sqCommand(entityId, "playlist jump +1");
+    } else if (command == MediaPlayerDef::C_PREVIOUS) {
+        sqCommand(entityId, "playlist jump -1");
+    }
+
+}
 
 void Squeezebox::jsonError(const QString& error) { qCWarning(m_logCategory) << "JSON error " << error; }
