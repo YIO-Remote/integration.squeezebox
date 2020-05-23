@@ -85,11 +85,25 @@ void Squeezebox::connect() {
     getPlayers();
 }
 
-void Squeezebox::disconnect() { setState(DISCONNECTED); }
+void Squeezebox::disconnect() {
+    _socket.close();
 
-void Squeezebox::enterStandby() {}
+    setState(DISCONNECTED);
+}
 
-void Squeezebox::leaveStandby() {}
+void Squeezebox::enterStandby() {
+    _mediaProgress.stop();
+    _inStandby = true;
+}
+
+void Squeezebox::leaveStandby() {
+    _inStandby = false;
+    for (QMap<QString, SqPlayer>::iterator i = _sqPlayerDatabase.begin(); i != _sqPlayerDatabase.end(); ++i) {
+        if (i->isPlaying) {
+            getPlayerStatus(i.key());
+        }
+    }
+}
 
 QByteArray Squeezebox::buildRpcJson(int id, const QString& player, const QString& command) {
     QJsonArray arr = QJsonArray();
@@ -228,7 +242,9 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
         if (data.value("mode").toString() == "play") {
             entity->setState(MediaPlayerDef::PLAYING);
             _sqPlayerDatabase[playerMac].isPlaying = true;
-            _mediaProgress.start();
+            if (_inStandby == false) {
+                _mediaProgress.start();
+            }
         } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
             entity->setState(MediaPlayerDef::IDLE);
             _sqPlayerDatabase[playerMac].isPlaying = false;

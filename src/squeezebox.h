@@ -102,6 +102,7 @@ class Squeezebox : public Integration {
         cometdSubscribe,
         connected
     } connectionState;
+
     QString                 _url;
     int                     _port;
     QString                 _httpurl;
@@ -114,4 +115,5 @@ class Squeezebox : public Integration {
     QMap<QString, SqPlayer> _sqPlayerDatabase;   // key: player mac, value: player infos
     QMap<int, QString>      _sqPlayerIdMapping;  // key: subscription id, value: player mac
     QList<EntityInterface*> _myEntities;
+    bool    _inStandby;
 };
