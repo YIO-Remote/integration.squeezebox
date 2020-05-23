@@ -94,7 +94,7 @@ class Squeezebox : public Integration {
     } connectionState;
     QString               _url;
     int                   _port;
-    QString _jsonrpc;
+    QString _httpurl;
     QNetworkAccessManager _nam;
     QTcpSocket            _socket;
 

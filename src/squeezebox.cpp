@@ -56,7 +56,7 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
         }
     }
 
-    _jsonrpc = "http://" + _url + ":" + QString::number(_port) + "/jsonrpc.js";
+    _httpurl = "http://" + _url + ":" + QString::number(_port) + "/";
 
     connectionState = idle;
 
@@ -98,7 +98,7 @@ QByteArray Squeezebox::buildRpcJson(int id, const QString& player, const QString
 }
 
 QNetworkRequest Squeezebox::buildRpcRequest(){
-    QNetworkRequest request(_jsonrpc);
+    QNetworkRequest request(_httpurl + "jsonrpc.js");
     request.setHeader(QNetworkRequest::KnownHeaders::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
 
@@ -128,7 +128,12 @@ void Squeezebox::getPlayers() {
         while (!players.isEmpty()) {
             auto player = players.takeFirst().toMap();
             QString playerid = player["playerid"].toString();
-            QStringList features("VOLUME");
+
+            QStringList features({"MEDIA_ALBUM", "MEDIA_ARTIST", "MEDIA_DURATION", "MEDIA_POSITION", "MEDIA_IMAGE", "MEDIA_TITLE", "MEDIA_TYPE", "MUTE", "MUTE_SET", "NEXT", "PAUSE", "PLAY", "PREVIOUS", "SEARCH", "SEEK",
+                                 "STOP", "VOLUME", "VOLUME_SET", "VOLUME_UP", "VOLUME_DOWN"});
+            if (player["canpoweroff"].toBool()) {
+                features.append({"TURN_OFF", "TURN_ON"});
+            }
 
             addAvailableEntity(playerid, "media_player", integrationId(), player["name"].toString(), features);
 
@@ -170,14 +175,7 @@ void Squeezebox::sendCometd(const QByteArray& message) {
     header += QStringLiteral("Content-Length: %1\n").arg(message.length());
     header += "Content-Type: application/json\n\n";
 
-    // QByteArray sender(header.length() + message->length(), Qt::Initialization::Uninitialized);
-    // sender.append(header);
-    // sender.append(*message);
-
-    QByteArray sender = header;
-    sender.append(*message);
-
-    _socket.write(header + *message + "\n");
+    _socket.write(header + message + "\n");
 }
 
 void Squeezebox::socketConnected() {
@@ -235,7 +233,7 @@ void Squeezebox::socketReceived() {
                 if (player.connected && !player.subscribed) {
                     int rand = qrand();
                     //QString command = "status 0 999 tags:acdj subscribe:60";
-                    QString command = "status - 1 tags:aBdgKlNotuxyY subscribe:60";
+                    QString command = "status - 1 tags:aBcdgKlNotuxyY subscribe:60";
 
                     QJsonArray request = QJsonArray();
                     request.append(i.key());
@@ -299,14 +297,14 @@ void Squeezebox::socketReceived() {
             QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
             entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
             entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
-
+            entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
         }
     }
 }
 
 void Squeezebox::sendCommand(const QString& type, const QString& entityId, int command, const QVariant& param) {
     if (type != "media_player") {
-        qCCritical(m_logCategory) << "Something went completly wrong - item type: " << type;
+        qCCritical(m_logCategory) << "Something went completly wrong - command with item type: " << type;
         return;
     }
 
