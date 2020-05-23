@@ -219,13 +219,20 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     QVariantList playlist = data.value("playlist_loop").toList();
 
     // get current player status
-    if (data.value("mode").toString() == "play") {
-        entity->setState(MediaPlayerDef::PLAYING);
-        _sqPlayerDatabase[playerMac].isPlaying = true;
-        _mediaProgress.start();
-    } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
-        entity->setState(MediaPlayerDef::IDLE);
-        _sqPlayerDatabase[playerMac].isPlaying = false;
+    if (!data.value("power").toBool()) {
+        entity->setState(MediaPlayerDef::OFF);
+    }
+    else {
+        entity->setState(MediaPlayerDef::ON);
+
+        if (data.value("mode").toString() == "play") {
+            entity->setState(MediaPlayerDef::PLAYING);
+            _sqPlayerDatabase[playerMac].isPlaying = true;
+            _mediaProgress.start();
+        } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
+            entity->setState(MediaPlayerDef::IDLE);
+            _sqPlayerDatabase[playerMac].isPlaying = false;
+        }
     }
 
     // get track infos
@@ -377,6 +384,10 @@ void Squeezebox::sendCommand(const QString& type, const QString& entityId, int c
         sqCommand(entityId, "playlist jump +1");
     } else if (command == MediaPlayerDef::C_PREVIOUS) {
         sqCommand(entityId, "playlist jump -1");
+    } else if (command == MediaPlayerDef::C_TURNON) {
+        sqCommand(entityId, "power 1");
+    } else if (command == MediaPlayerDef::C_TURNOFF) {
+        sqCommand(entityId, "power 0");
     }
 
 }

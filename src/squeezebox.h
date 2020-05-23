@@ -81,7 +81,7 @@ class Squeezebox : public Integration {
         bool isPlaying = false;
         double position = 0;
     };
-    const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgjKlNotuxyY";
+    const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgjKlNotuxyY power";
 
     void getPlayers();
     void jsonError(const QString& error);
