@@ -263,6 +263,24 @@ void Squeezebox::socketReceived() {
             }
         } else if (map.value("channel").toString() == _subscriptionChannel) {
             QString player = _sqPlayerIdMapping.value(map["id"].toInt());
+            EntityInterface* entity = m_entities->getEntityInterface(player);
+
+            QVariantMap data = qvariant_cast<QVariantMap>(map.value("data"));
+            QVariantList playlist = data.value("playlist_loop").toList();
+
+            // get current player status
+            if (data.value("mode").toString() == "play") {
+                entity->setState(MediaPlayerDef::PLAYING);
+            } else if (data.value("mode").toString() == "pause") {
+                entity->setState(MediaPlayerDef::IDLE);
+            }
+
+            // get track infos
+            int playlistIndex = data.value("playlist_curr_index").toInt();
+            QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
+            entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
+            entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
+
         }
     }
 }
