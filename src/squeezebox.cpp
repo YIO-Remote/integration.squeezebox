@@ -58,13 +58,22 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
 
     _httpurl = "http://" + _url + ":" + QString::number(_port) + "/";
 
-    connectionState = idle;
+    _connectionState = idle;
 
     // read added entities
     _myEntities = m_entities->getByIntegration(integrationId());
     for (auto entity : _myEntities) {
         _sqPlayerDatabase.insert(entity->entity_id(), SqPlayer(false));
     }
+
+    // prepare connection timeout timer
+    _connectionTimeout.setSingleShot(true);
+    _connectionTimeout.setInterval(3 * 1000);
+    _connectionTimeout.stop();
+
+    QObject::connect(&_connectionTimeout, &QTimer::timeout, this, &Squeezebox::onConnectionTimeoutTimer);
+
+    _connectionTries = 0;
 
     // prepare media progress timer
     _mediaProgress.setSingleShot(false);
@@ -75,18 +84,34 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
 
     QObject::connect(&_socket, &QTcpSocket::connected, this, &Squeezebox::socketConnected);
     QObject::connect(&_socket, &QIODevice::readyRead, this, &Squeezebox::socketReceived);
+    QObject::connect(&_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this, &Squeezebox::socketError);
+
+    QObject::connect(&_nam, &QNetworkAccessManager::networkAccessibleChanged, this, &Squeezebox::networkAccessibleChanged);
 
     qCDebug(m_logCategory) << "setup";
 }
 
+void Squeezebox::networkAccessibleChanged(QNetworkAccessManager::NetworkAccessibility accessible) {
+    if (accessible != QNetworkAccessManager::NetworkAccessibility::Accessible) {
+        disconnect();
+    }
+}
+
 void Squeezebox::connect() {
     setState(CONNECTING);
+    _userDisconnect = false;
 
+    qCDebug(m_logCategory) << "Try to connect for the " << QString::number(_connectionTries+1) << "st/nd time";
+
+    _connectionTimeout.start();
     getPlayers();
 }
 
 void Squeezebox::disconnect() {
+    _userDisconnect = true;
+
     _socket.close();
+    _mediaProgress.stop();
 
     setState(DISCONNECTED);
 }
@@ -102,6 +127,32 @@ void Squeezebox::leaveStandby() {
         if (i->isPlaying) {
             getPlayerStatus(i.key());
         }
+    }
+}
+
+void Squeezebox::onConnectionTimeoutTimer() {
+    if (_connectionState == connected) {
+        _connectionTries = 0;
+        return;
+    }
+
+    if (_connectionTries == 3) {
+        disconnect();
+
+        qCCritical(m_logCategory) << "Cannot connect to Squeezebox server: retried 3 times connecting to" << _url;
+        QObject* param = this;
+
+        m_notifications->add(true, tr("Cannot connect to ").append(friendlyName()).append("."), tr("Reconnect"),
+                             [](QObject* param) {
+                                 Integration* i = qobject_cast<Integration*>(param);
+                                 i->connect();
+                             },
+                             param);
+
+        _connectionTries = 0;
+    } else {
+        _connectionTries++;
+        connect();
     }
 }
 
@@ -127,9 +178,10 @@ QNetworkRequest Squeezebox::buildRpcRequest(){
 }
 
 void Squeezebox::getPlayers() {
-    connectionState = playerInfo;
+    _connectionState = playerInfo;
 
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, "-", "players 0 99"));
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -175,6 +227,7 @@ void Squeezebox::getPlayers() {
 void Squeezebox::getPlayerStatus(const QString& playerMac)
 {
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, _sqCmdPlayerStatus));
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -193,6 +246,7 @@ void Squeezebox::getPlayerStatus(const QString& playerMac)
 void Squeezebox::sqCommand(const QString& playerMac, const QString& command) {
 
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, command));
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -219,12 +273,30 @@ void Squeezebox::sendCometd(const QByteArray& message) {
 }
 
 void Squeezebox::socketConnected() {
-    connectionState = cometdHandshake;
+    _connectionState = cometdHandshake;
     QByteArray message =
         "[{\"channel\":\"/meta/"
         "handshake\",\"supportedConnectionTypes\":[\"long-polling\",\"streaming\"],\"version\":\"1.0\"}]";
     sendCometd(message);
     qCInfo(m_logCategory) << "connected to socket";
+}
+
+void Squeezebox::socketError(QAbstractSocket::SocketError socketError) {
+    if (_userDisconnect) {
+        return;
+    }
+    qCCritical(m_logCategory) << "Socket error: " << socketError << " - try to reconnect";
+    _connectionState = error;
+    if (!_connectionTimeout.isActive()) {
+        _connectionTimeout.start();
+    }
+}
+
+void Squeezebox::networkError(QNetworkReply::NetworkError code) {
+    if (_userDisconnect) {
+        return;
+    }
+    qCCritical(m_logCategory) << "HTTP connection error: " << code << " - no reconnect attempt";
 }
 
 void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& data) {
@@ -315,22 +387,22 @@ void Squeezebox::socketReceived() {
     while (!list.isEmpty()) {
         QVariantMap map = list.takeFirst().toMap();
 
-        if (connectionState == cometdHandshake && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/handshake") {
+        if (_connectionState == cometdHandshake && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/handshake") {
             // first step of handshake process; getting client id
             _clientId = map.value("clientId").toString().remove("\"");
             qCInfo(m_logCategory) << "Client ID: " << _clientId;
             _subscriptionChannel = "/slim/" + _clientId + "/status";
 
-            connectionState = cometdConnect;
+            _connectionState = cometdConnect;
 
             QByteArray message = "[{\"channel\":\"/meta/connect\",\"clientId\":\"" + _clientId.toUtf8() +
                                  "\",\"connectionType\":\"streaming\"}]";
             sendCometd(message);
-        } else if( connectionState == cometdConnect && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/connect") {
+        } else if( _connectionState == cometdConnect && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/connect") {
             // now connected
             // subscribe to player messages
 
-            connectionState = cometdSubscribe;
+            _connectionState = cometdSubscribe;
 
             for (QMap<QString, SqPlayer>::iterator i = _sqPlayerDatabase.begin(); i != _sqPlayerDatabase.end(); ++i) {
                 SqPlayer player = *i;
@@ -363,7 +435,7 @@ void Squeezebox::socketReceived() {
                     sendCometd(message);
                 }
             }
-        } else if (connectionState == cometdSubscribe && map.value("successful").toBool() == true && map.value("channel").toString() == "/slim/subscribe") {
+        } else if (_connectionState == cometdSubscribe && map.value("successful").toBool() == true && map.value("channel").toString() == "/slim/subscribe") {
             QString player = _sqPlayerIdMapping.value(map["id"].toInt());
             _sqPlayerDatabase[player].subscribed = true;
 
@@ -378,7 +450,7 @@ void Squeezebox::socketReceived() {
                 }
             }
             if (connected == subscriptions) {
-                connectionState = connectionStates::connected;
+                _connectionState = connectionStates::connected;
                 setState(CONNECTED);
             }
         } else if (map.value("channel").toString() == _subscriptionChannel) {

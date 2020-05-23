@@ -68,9 +68,14 @@ class Squeezebox : public Integration {
     void leaveStandby() override;
     void enterStandby() override;
 
+    void networkAccessibleChanged(QNetworkAccessManager::NetworkAccessibility accessible);
+
     void socketConnected();
     void socketReceived();
+    void socketError(QAbstractSocket::SocketError socketError);
+    void networkError(QNetworkReply::NetworkError code);
     void onMediaProgressTimer();
+    void onConnectionTimeoutTimer();
 
  private:
     struct SqPlayer {
@@ -100,14 +105,18 @@ class Squeezebox : public Integration {
         cometdHandshake,
         cometdConnect,
         cometdSubscribe,
-        connected
-    } connectionState;
+        connected,
+        error
+    } _connectionState;
 
     QString                 _url;
     int                     _port;
     QString                 _httpurl;
     QNetworkAccessManager   _nam;
     QTcpSocket              _socket;
+    QTimer _connectionTimeout;
+    int _connectionTries;
+    bool _userDisconnect;
     QTimer                  _mediaProgress;
     QString                 _clientId;
     int                     _playerCnt;
