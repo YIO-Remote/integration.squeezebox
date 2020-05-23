@@ -139,6 +139,7 @@ void Squeezebox::getPlayers() {
 
             if (_sqPlayerDatabase.contains(playerid)) {
                 _sqPlayerDatabase[playerid].connected = true;
+                getPlayerStatus(playerid);
             }
         }
 
@@ -147,6 +148,24 @@ void Squeezebox::getPlayers() {
 
         // connect to socket
         _socket.connectToHost(_url, _port);
+    });
+}
+
+void Squeezebox::getPlayerStatus(const QString& playerMac)
+{
+    QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, _sqCmdPlayerStatus));
+    QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
+        QString         answer = reply->readAll();
+        QJsonParseError parseerror;
+        QJsonDocument   doc = QJsonDocument::fromJson(answer.toUtf8(), &parseerror);
+
+        if (parseerror.error != QJsonParseError::NoError) {
+            jsonError(parseerror.errorString());
+            return;
+        }
+
+        QVariantMap map = doc.toVariant().toMap();
+        parsePlayerStatus(playerMac, qvariant_cast<QVariantMap>(map.value("result")));
     });
 }
 
@@ -185,6 +204,26 @@ void Squeezebox::socketConnected() {
         "handshake\",\"supportedConnectionTypes\":[\"long-polling\",\"streaming\"],\"version\":\"1.0\"}]";
     sendCometd(message);
     qCInfo(m_logCategory) << "connected to socket";
+}
+
+void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& data) {
+    EntityInterface* entity = m_entities->getEntityInterface(playerMac);
+
+    QVariantList playlist = data.value("playlist_loop").toList();
+
+    // get current player status
+    if (data.value("mode").toString() == "play") {
+        entity->setState(MediaPlayerDef::PLAYING);
+    } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
+        entity->setState(MediaPlayerDef::IDLE);
+    }
+
+    // get track infos
+    int playlistIndex = data.value("playlist_curr_index").toInt();
+    QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
+    entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
+    entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
+    entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
 }
 
 void Squeezebox::socketReceived() {
@@ -232,8 +271,7 @@ void Squeezebox::socketReceived() {
                 SqPlayer player = *i;
                 if (player.connected && !player.subscribed) {
                     int rand = qrand();
-                    //QString command = "status 0 999 tags:acdj subscribe:60";
-                    QString command = "status - 1 tags:aBcdgKlNotuxyY subscribe:60";
+                    QString command = _sqCmdPlayerStatus + " subscribe:60";
 
                     QJsonArray request = QJsonArray();
                     request.append(i.key());
@@ -280,24 +318,9 @@ void Squeezebox::socketReceived() {
             }
         } else if (map.value("channel").toString() == _subscriptionChannel) {
             QString player = _sqPlayerIdMapping.value(map["id"].toInt());
-            EntityInterface* entity = m_entities->getEntityInterface(player);
-
             QVariantMap data = qvariant_cast<QVariantMap>(map.value("data"));
-            QVariantList playlist = data.value("playlist_loop").toList();
 
-            // get current player status
-            if (data.value("mode").toString() == "play") {
-                entity->setState(MediaPlayerDef::PLAYING);
-            } else if (data.value("mode").toString() == "pause" || data.value("mode").toString() == "stop") {
-                entity->setState(MediaPlayerDef::IDLE);
-            }
-
-            // get track infos
-            int playlistIndex = data.value("playlist_curr_index").toInt();
-            QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
-            entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
-            entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
-            entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
+            parsePlayerStatus(player, data);
         }
     }
 }

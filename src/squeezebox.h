@@ -78,12 +78,15 @@ class Squeezebox : public Integration {
         bool connected = false;
         bool subscribed = false;
     };
+    const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgKlNotuxyY";
 
 
     void getPlayers();
     void jsonError(const QString& error);
     void sendCometd(const QByteArray& message);
     void sqCommand(const QString& playerMac, const QString& command);
+    void getPlayerStatus(const QString& playerMac);
+    void parsePlayerStatus(const QString& playerMac, const QVariantMap& data);
 
     QByteArray buildRpcJson(int id, const QString& player, const QString& command);
     QNetworkRequest buildRpcRequest();
