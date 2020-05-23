@@ -84,7 +84,7 @@ void Squeezebox::enterStandby() {}
 
 void Squeezebox::leaveStandby() {}
 
-QByteArray Squeezebox::buildRpcJson(int id, QString player, QString command) {
+QByteArray Squeezebox::buildRpcJson(int id, const QString& player, const QString& command) {
     QJsonArray arr = QJsonArray();
     arr.append(player);
     arr.append(QJsonArray::fromStringList(command.split(" ")));
@@ -161,14 +161,13 @@ void Squeezebox::sqCommand(const QString& playerMac, const QString& command) {
         QVariantMap map = doc.toVariant().toMap();
         QVariantMap results = qvariant_cast<QVariantMap>(map.value("result"));
 
-        // HERE: suche nicht verbundene player
         qCDebug(m_logCategory) << "kommando gesendet";
     });
 }
 
-void Squeezebox::sendCometd(QByteArray* message) {
+void Squeezebox::sendCometd(const QByteArray& message) {
     QByteArray header = "POST /cometd HTTP/1.1\n";
-    header += QStringLiteral("Content-Length: %1\n").arg(message->length());
+    header += QStringLiteral("Content-Length: %1\n").arg(message.length());
     header += "Content-Type: application/json\n\n";
 
     // QByteArray sender(header.length() + message->length(), Qt::Initialization::Uninitialized);
@@ -186,7 +185,7 @@ void Squeezebox::socketConnected() {
     QByteArray message =
         "[{\"channel\":\"/meta/"
         "handshake\",\"supportedConnectionTypes\":[\"long-polling\",\"streaming\"],\"version\":\"1.0\"}]";
-    sendCometd(&message);
+    sendCometd(message);
     qCInfo(m_logCategory) << "connected to socket";
 }
 
@@ -201,7 +200,6 @@ void Squeezebox::socketReceived() {
 
     QJsonParseError parseerror;
     QByteArray      document = all[all.length() - 1].toUtf8();
-    qCInfo(m_logCategory) << "Answer: " << document;
 
     QJsonDocument doc = QJsonDocument::fromJson(document, &parseerror);
     if (parseerror.error != QJsonParseError::NoError) {
@@ -225,7 +223,7 @@ void Squeezebox::socketReceived() {
 
             QByteArray message = "[{\"channel\":\"/meta/connect\",\"clientId\":\"" + _clientId.toUtf8() +
                                  "\",\"connectionType\":\"streaming\"}]";
-            sendCometd(&message);
+            sendCometd(message);
         } else if( connectionState == cometdConnect && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/connect") {
             // now connected
             // subscribe to player messages
@@ -261,7 +259,7 @@ void Squeezebox::socketReceived() {
 
 
                     _sqPlayerIdMapping.insert(rand, i.key());
-                    sendCometd(&message);
+                    sendCometd(message);
                 }
             }
         } else if (connectionState == cometdSubscribe && map.value("successful").toBool() == true && map.value("channel").toString() == "/slim/subscribe") {
