@@ -245,7 +245,13 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     } else {
         entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, "");
     }
-    entity->updateAttrByIndex(MediaPlayerDef::VOLUME, data.value("mixer_volume").toInt());
+    int volume = data.value("mixer_volume").toInt();
+    if (volume < 0) {
+        entity->updateAttrByIndex(MediaPlayerDef::MUTED, true);
+    } else {
+        entity->updateAttrByIndex(MediaPlayerDef::MUTED, false);
+        entity->updateAttrByIndex(MediaPlayerDef::VOLUME, data.value("mixer_volume").toInt());
+    }
     entity->updateAttrByIndex(MediaPlayerDef::MEDIADURATION, data.value("duration").toInt());
 
     _sqPlayerDatabase[playerMac].position = data.value("time").toDouble();
@@ -388,6 +394,14 @@ void Squeezebox::sendCommand(const QString& type, const QString& entityId, int c
         sqCommand(entityId, "power 1");
     } else if (command == MediaPlayerDef::C_TURNOFF) {
         sqCommand(entityId, "power 0");
+    } else if (command == MediaPlayerDef::C_MUTE) {
+        sqCommand(entityId, "mixer muting 1");
+    } else if (command == MediaPlayerDef::C_VOLUME_UP) {
+        sqCommand(entityId, "button volume_up");
+    } else if (command == MediaPlayerDef::C_VOLUME_DOWN) {
+        sqCommand(entityId, "button volume_down");
+    } else if (command == MediaPlayerDef::C_VOLUME_SET) {
+        sqCommand(entityId, "mixer volume " + param.toString());
     }
 
 }
