@@ -80,10 +80,9 @@ class Squeezebox : public Integration {
  private:
     struct SqPlayer {
         SqPlayer() {}
-        SqPlayer(bool connected) : connected(connected) {}
         bool   connected = false;
         bool   subscribed = false;
-        bool isPlaying = false;
+        bool   isPlaying = false;
         double position = 0;
     };
     const QString _sqCmdPlayerStatus = "status - 1 tags:aBcdgjKlNotuxyY power";
@@ -114,9 +113,9 @@ class Squeezebox : public Integration {
     QString                 _httpurl;
     QNetworkAccessManager   _nam;
     QTcpSocket              _socket;
-    QTimer _connectionTimeout;
-    int _connectionTries;
-    bool _userDisconnect;
+    QTimer                  _connectionTimeout;
+    int                     _connectionTries;
+    bool                    _userDisconnect;
     QTimer                  _mediaProgress;
     QString                 _clientId;
     int                     _playerCnt;
@@ -124,5 +123,5 @@ class Squeezebox : public Integration {
     QMap<QString, SqPlayer> _sqPlayerDatabase;   // key: player mac, value: player infos
     QMap<int, QString>      _sqPlayerIdMapping;  // key: subscription id, value: player mac
     QList<EntityInterface*> _myEntities;
-    bool    _inStandby;
+    bool                    _inStandby;
 };

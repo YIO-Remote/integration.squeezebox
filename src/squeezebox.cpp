@@ -63,7 +63,7 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
     // read added entities
     _myEntities = m_entities->getByIntegration(integrationId());
     for (auto entity : _myEntities) {
-        _sqPlayerDatabase.insert(entity->entity_id(), SqPlayer(false));
+        _sqPlayerDatabase.insert(entity->entity_id(), SqPlayer());
     }
 
     // prepare connection timeout timer
@@ -84,9 +84,11 @@ Squeezebox::Squeezebox(const QVariantMap& config, EntitiesInterface* entities, N
 
     QObject::connect(&_socket, &QTcpSocket::connected, this, &Squeezebox::socketConnected);
     QObject::connect(&_socket, &QIODevice::readyRead, this, &Squeezebox::socketReceived);
-    QObject::connect(&_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this, &Squeezebox::socketError);
+    QObject::connect(&_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
+                     &Squeezebox::socketError);
 
-    QObject::connect(&_nam, &QNetworkAccessManager::networkAccessibleChanged, this, &Squeezebox::networkAccessibleChanged);
+    QObject::connect(&_nam, &QNetworkAccessManager::networkAccessibleChanged, this,
+                     &Squeezebox::networkAccessibleChanged);
 
     qCDebug(m_logCategory) << "setup";
 }
@@ -101,7 +103,7 @@ void Squeezebox::connect() {
     setState(CONNECTING);
     _userDisconnect = false;
 
-    qCDebug(m_logCategory) << "Try to connect for the " << QString::number(_connectionTries+1) << "st/nd time";
+    qCDebug(m_logCategory) << "Try to connect for the " << QString::number(_connectionTries + 1) << "st/nd time";
 
     _connectionTimeout.start();
     getPlayers();
@@ -169,7 +171,7 @@ QByteArray Squeezebox::buildRpcJson(int id, const QString& player, const QString
     return QJsonDocument(json).toJson();
 }
 
-QNetworkRequest Squeezebox::buildRpcRequest(){
+QNetworkRequest Squeezebox::buildRpcRequest() {
     QNetworkRequest request(_httpurl + "jsonrpc.js");
     request.setHeader(QNetworkRequest::KnownHeaders::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
@@ -181,7 +183,8 @@ void Squeezebox::getPlayers() {
     _connectionState = playerInfo;
 
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, "-", "players 0 99"));
-    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this,
+                     &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -199,11 +202,13 @@ void Squeezebox::getPlayers() {
 
         QVariantList players = results.value("players_loop").toList();
         while (!players.isEmpty()) {
-            auto player = players.takeFirst().toMap();
+            auto    player = players.takeFirst().toMap();
             QString playerid = player["playerid"].toString();
 
-            QStringList features({"MEDIA_ALBUM", "MEDIA_ARTIST", "MEDIA_DURATION", "MEDIA_POSITION", "MEDIA_IMAGE", "MEDIA_TITLE", "MEDIA_TYPE", "MUTE", "MUTE_SET", "NEXT", "PAUSE", "PLAY", "PREVIOUS", "SEARCH", "SEEK",
-                                 "STOP", "VOLUME", "VOLUME_SET", "VOLUME_UP", "VOLUME_DOWN"});
+            QStringList features({"MEDIA_ALBUM", "MEDIA_ARTIST", "MEDIA_DURATION", "MEDIA_POSITION", "MEDIA_IMAGE",
+                                  "MEDIA_TITLE", "MEDIA_TYPE",   "MUTE",           "MUTE_SET",       "NEXT",
+                                  "PAUSE",       "PLAY",         "PREVIOUS",       "SEARCH",         "SEEK",
+                                  "STOP",        "VOLUME",       "VOLUME_SET",     "VOLUME_UP",      "VOLUME_DOWN"});
             if (player["canpoweroff"].toBool()) {
                 features.append({"TURN_OFF", "TURN_ON"});
             }
@@ -224,10 +229,10 @@ void Squeezebox::getPlayers() {
     });
 }
 
-void Squeezebox::getPlayerStatus(const QString& playerMac)
-{
+void Squeezebox::getPlayerStatus(const QString& playerMac) {
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, _sqCmdPlayerStatus));
-    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this,
+                     &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -244,9 +249,9 @@ void Squeezebox::getPlayerStatus(const QString& playerMac)
 }
 
 void Squeezebox::sqCommand(const QString& playerMac, const QString& command) {
-
     QNetworkReply* reply = _nam.post(buildRpcRequest(), buildRpcJson(1, playerMac, command));
-    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this, &Squeezebox::networkError);
+    QObject::connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::error), this,
+                     &Squeezebox::networkError);
     QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
         QString         answer = reply->readAll();
         QJsonParseError parseerror;
@@ -274,11 +279,21 @@ void Squeezebox::sendCometd(const QByteArray& message) {
 
 void Squeezebox::socketConnected() {
     _connectionState = cometdHandshake;
-    QByteArray message =
-        "[{\"channel\":\"/meta/"
-        "handshake\",\"supportedConnectionTypes\":[\"long-polling\",\"streaming\"],\"version\":\"1.0\"}]";
-    sendCometd(message);
-    qCInfo(m_logCategory) << "connected to socket";
+
+    QJsonArray connectionTypes = QJsonArray();
+    connectionTypes.append("long-polling");
+    connectionTypes.append("streaming");
+
+    QJsonObject json = QJsonObject();
+    json.insert("channel", "/meta/handshake");
+    json.insert("supportedConnectionTypes", connectionTypes);
+    json.insert("version", "1.0");
+
+    QJsonArray message = QJsonArray();
+    message.append(json);
+
+    sendCometd(QJsonDocument(message).toJson());
+    qCDebug(m_logCategory) << "connected to socket";
 }
 
 void Squeezebox::socketError(QAbstractSocket::SocketError socketError) {
@@ -307,8 +322,7 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     // get current player status
     if (!data.value("power").toBool()) {
         entity->setState(MediaPlayerDef::OFF);
-    }
-    else {
+    } else {
         entity->setState(MediaPlayerDef::ON);
 
         if (data.value("mode").toString() == "play") {
@@ -324,12 +338,13 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     }
 
     // get track infos
-    int playlistIndex = data.value("playlist_curr_index").toInt();
+    int         playlistIndex = data.value("playlist_curr_index").toInt();
     QVariantMap playlistItem = qvariant_cast<QVariantMap>(playlist.at(playlistIndex));
     entity->updateAttrByIndex(MediaPlayerDef::MEDIAARTIST, playlistItem.value("artist").toString());
     entity->updateAttrByIndex(MediaPlayerDef::MEDIATITLE, playlistItem.value("title").toString());
     if (playlistItem.value("coverart").toBool()) {
-    entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
+        entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE,
+                                  _httpurl + "music/" + playlistItem.value("coverid").toString() + "/cover.jpg");
     } else {
         entity->updateAttrByIndex(MediaPlayerDef::MEDIAIMAGE, "");
     }
@@ -345,7 +360,6 @@ void Squeezebox::parsePlayerStatus(const QString& playerMac, const QVariantMap& 
     _sqPlayerDatabase[playerMac].position = data.value("time").toDouble();
     entity->updateAttrByIndex(MediaPlayerDef::MEDIAPROGRESS, _sqPlayerDatabase[playerMac].position);
 }
-
 
 void Squeezebox::onMediaProgressTimer() {
     bool onePlaying = false;
@@ -368,7 +382,7 @@ void Squeezebox::socketReceived() {
     QStringList all = answer.split(QRegExp("[\r\n]"), QString::SkipEmptyParts);
 
     // check if the answer is a valid http 200 response or if it is a CometD packet
-    if (! ((all[0].startsWith("HTTP") && all[0].endsWith("200 OK")) || (all.size() == 2))) {
+    if (!((all[0].startsWith("HTTP") && all[0].endsWith("200 OK")) || (all.size() == 2))) {
         return;
     }
 
@@ -387,7 +401,8 @@ void Squeezebox::socketReceived() {
     while (!list.isEmpty()) {
         QVariantMap map = list.takeFirst().toMap();
 
-        if (_connectionState == cometdHandshake && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/handshake") {
+        if (_connectionState == cometdHandshake && map.value("successful").toBool() == true &&
+            map.value("channel").toString() == "/meta/handshake") {
             // first step of handshake process; getting client id
             _clientId = map.value("clientId").toString().remove("\"");
             qCInfo(m_logCategory) << "Client ID: " << _clientId;
@@ -395,10 +410,17 @@ void Squeezebox::socketReceived() {
 
             _connectionState = cometdConnect;
 
-            QByteArray message = "[{\"channel\":\"/meta/connect\",\"clientId\":\"" + _clientId.toUtf8() +
-                                 "\",\"connectionType\":\"streaming\"}]";
-            sendCometd(message);
-        } else if( _connectionState == cometdConnect && map.value("successful").toBool() == true && map.value("channel").toString() == "/meta/connect") {
+            QJsonObject json = QJsonObject();
+            json.insert("channel", "/meta/connect");
+            json.insert("clientId", _clientId);
+            json.insert("connectionType", "streaming");
+
+            QJsonArray message = QJsonArray();
+            message.append(json);
+
+            sendCometd(QJsonDocument(message).toJson());
+        } else if (_connectionState == cometdConnect && map.value("successful").toBool() == true &&
+                   map.value("channel").toString() == "/meta/connect") {
             // now connected
             // subscribe to player messages
 
@@ -407,7 +429,7 @@ void Squeezebox::socketReceived() {
             for (QMap<QString, SqPlayer>::iterator i = _sqPlayerDatabase.begin(); i != _sqPlayerDatabase.end(); ++i) {
                 SqPlayer player = *i;
                 if (player.connected && !player.subscribed) {
-                    int rand = qrand();
+                    int     rand = qrand();
                     QString command = _sqCmdPlayerStatus + " subscribe:60";
 
                     QJsonArray request = QJsonArray();
@@ -430,12 +452,12 @@ void Squeezebox::socketReceived() {
 
                     QByteArray message = QJsonDocument(complete).toJson();
 
-
                     _sqPlayerIdMapping.insert(rand, i.key());
                     sendCometd(message);
                 }
             }
-        } else if (_connectionState == cometdSubscribe && map.value("successful").toBool() == true && map.value("channel").toString() == "/slim/subscribe") {
+        } else if (_connectionState == cometdSubscribe && map.value("successful").toBool() == true &&
+                   map.value("channel").toString() == "/slim/subscribe") {
             QString player = _sqPlayerIdMapping.value(map["id"].toInt());
             _sqPlayerDatabase[player].subscribed = true;
 
@@ -454,7 +476,7 @@ void Squeezebox::socketReceived() {
                 setState(CONNECTED);
             }
         } else if (map.value("channel").toString() == _subscriptionChannel) {
-            QString player = _sqPlayerIdMapping.value(map["id"].toInt());
+            QString     player = _sqPlayerIdMapping.value(map["id"].toInt());
             QVariantMap data = qvariant_cast<QVariantMap>(map.value("data"));
 
             parsePlayerStatus(player, data);
@@ -491,7 +513,6 @@ void Squeezebox::sendCommand(const QString& type, const QString& entityId, int c
     } else if (command == MediaPlayerDef::C_VOLUME_SET) {
         sqCommand(entityId, "mixer volume " + param.toString());
     }
-
 }
 
 void Squeezebox::jsonError(const QString& error) { qCWarning(m_logCategory) << "JSON error " << error; }
