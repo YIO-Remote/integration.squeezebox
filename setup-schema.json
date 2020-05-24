@@ -1,23 +1,33 @@
 {
     "$schema": "http://json-schema.org",
-    "$id": "http://yio-remote.com/openhab.json",
+    "$id": "http://yio-remote.com/squeezebox.json",
     "type": "object",
-    "title": "YIO Integration OpenHAB Schema",
-    "description": "Required data points to set up a OpenHAB integrations.",
+    "title": "YIO Integration Squeezebox Schema",
+    "description": "Required data points to set up a Squeezebox integrations.",
     "default": {},
-    "additionalProperties": true,
+    "additionalProperties": false,
     "required": [
-        "url"
+        "url", "port"
     ],
     "properties": {
         "url": {
             "$id": "#/properties/url",
             "type": "string",
-            "title": "IP address or hostname and port",
-            "description": "The IP address or hostname and port of your OpenHAB server.",
+            "title": "IP address or hostname",
+            "description": "The IP address or hostname (without the port) of your Squeezebox server.",
             "default": "",
             "examples": [
-                "192.168.100.2:8123", "yourdomain.com:8123"
+                "192.168.100.2", "yourdomain.com"
+            ]
+        },
+	"port": {
+            "$id": "#/properties/port",
+            "type": "string",
+            "title": "Port",
+            "description": "The port of your Squeezebox server.",
+            "default": "9000",
+            "examples": [
+                "9000"
             ]
         }
     }

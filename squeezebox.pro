@@ -6,8 +6,8 @@ QT       += core quick network
 GIT_HASH = "$$system(git log -1 --format="%H")"
 GIT_BRANCH = "$$system(git rev-parse --abbrev-ref HEAD)"
 GIT_VERSION = "$$system(git describe --match "v[0-9]*" --tags HEAD --always)"
-OH_VERSION = $$replace(GIT_VERSION, v, "")
-DEFINES += PLUGIN_VERSION=\\\"$$OH_VERSION\\\"
+SQUEEZEBOX_VERSION = $$replace(GIT_VERSION, v, "")
+DEFINES += PLUGIN_VERSION=\\\"$$SQUEEZEBOX_VERSION\\\"
 
 # build timestamp
 win32 {

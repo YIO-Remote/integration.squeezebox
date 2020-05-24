@@ -1,6 +1,6 @@
 {
   \"name\": \"$$TARGET\",
-  \"version\": \"$$OH_VERSION\",
+  \"version\": \"$$SQUEEZEBOX_VERSION\",
   \"build\": {
     \"date\": \"$$BUILDDATE\",
     \"qt\": \"$$QT_VERSION\",
