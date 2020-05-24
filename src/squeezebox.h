@@ -41,7 +41,7 @@ const bool NO_WORKER_THREAD = false;
 class SqueezeboxPlugin : public Plugin {
     Q_OBJECT
     Q_INTERFACES(PluginInterface)
-    Q_PLUGIN_METADATA(IID "YIO.PluginInterface" FILE "openhab.json")
+    Q_PLUGIN_METADATA(IID "YIO.PluginInterface" FILE "squeezebox.json")
 
  public:
     SqueezeboxPlugin();
