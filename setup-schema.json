@@ -1,0 +1,34 @@
+{
+    "$schema": "http://json-schema.org",
+    "$id": "http://yio-remote.com/squeezebox.json",
+    "type": "object",
+    "title": "YIO Integration Squeezebox Schema",
+    "description": "Required data points to set up a Squeezebox integrations.",
+    "default": {},
+    "additionalProperties": false,
+    "required": [
+        "url", "port"
+    ],
+    "properties": {
+        "url": {
+            "$id": "#/properties/url",
+            "type": "string",
+            "title": "IP address or hostname",
+            "description": "The IP address or hostname (without the port) of your Squeezebox server.",
+            "default": "",
+            "examples": [
+                "192.168.100.2", "yourdomain.com"
+            ]
+        },
+	"port": {
+            "$id": "#/properties/port",
+            "type": "string",
+            "title": "Port",
+            "description": "The port of your Squeezebox server.",
+            "default": "9000",
+            "examples": [
+                "9000"
+            ]
+        }
+    }
+}
